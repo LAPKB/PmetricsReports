@@ -1,0 +1,26 @@
+Package: PmetricsReports
+Title: Pmetrics Reports App
+Version: 0.1.0
+Authors@R: 
+    person("Michael", "Neely", , "mneely@usc.edu", role = c("aut", "cre"))
+Description: Standalone golem-based Shiny app for reviewing Pmetrics run
+    results and exporting PDF reports.
+License: GPL (>= 3)
+Depends:
+    R (>= 4.2)
+Imports:
+    bslib,
+    cli,
+    dplyr,
+    ggplot2,
+    golem,
+    htmltools,
+    plotly,
+    Pmetrics,
+    quarto,
+    shiny,
+    stats,
+    tools
+Config/roxygen2/version: 8.0.0
+Encoding: UTF-8
+LazyData: true

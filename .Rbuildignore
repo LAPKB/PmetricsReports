@@ -1,0 +1,8 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.here$
+^README\.Rmd$
+^README\.md$
+^dev$
+^inst/app/templates$
+^inst/app/www$

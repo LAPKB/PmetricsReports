@@ -1,0 +1,302 @@
+---
+title: "Pmetrics Report"
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    include-in-header:
+      text: |
+        \usepackage{fancyhdr}
+        \usepackage{lastpage}
+params:
+  res_path: NULL
+  pkg_path: ""
+  report_filename: "report.pdf"
+  outeq:
+    value: []
+  block:
+    value: []
+  pred_type: "post"
+  icen: "median"
+  cycle_mode: "neg2ll"
+  cycle_gamlam_label: "Gamma"
+  cycle_ic_label: "AIC"
+  parameter: NULL
+  include_summary: true
+  include_obs_pred: true
+  include_metrics: true
+  include_residuals: true
+  include_parameters: true
+  include_cycle: true
+---
+
+```{r setup}
+#| include: false
+library(ggplot2)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# When the package is loaded via pkgload::load_all() in the calling session
+# (development mode) it is not installed, so library() would fail in this
+# fresh Quarto subprocess.  Use load_all() from the source path when provided.
+pkg_path <- params$pkg_path
+if (!is.null(pkg_path) && nchar(pkg_path) > 0) {
+  pkgload::load_all(pkg_path, quiet = TRUE)
+} else {
+  library(PmetricsReports)
+}
+
+res <- readRDS(params$res_path)
+outeq <- params$outeq
+block <- params$block
+pred_type <- params$pred_type
+icen <- params$icen
+cycle_mode <- params$cycle_mode
+cycle_gamlam_label <- params$cycle_gamlam_label
+cycle_ic_label <- params$cycle_ic_label
+parameter <- params$parameter
+include_summary <- isTRUE(params$include_summary)
+include_obs_pred <- isTRUE(params$include_obs_pred)
+include_metrics <- isTRUE(params$include_metrics)
+include_residuals <- isTRUE(params$include_residuals)
+include_parameters <- isTRUE(params$include_parameters)
+include_cycle <- isTRUE(params$include_cycle)
+report_filename <- if (!is.null(params$report_filename) && nzchar(params$report_filename)) {
+  as.character(params$report_filename)
+} else {
+  "report.pdf"
+}
+
+opts <- Pmetrics::getPMoptions()
+date_format <- opts$date_format
+if (is.null(date_format) || !nzchar(date_format)) {
+  date_format <- "%m/%d/%y"
+}
+reported_date <- format(Sys.time(), date_format)
+reported_time <- format(Sys.time(), "%H:%M")
+
+latex_escape <- function(x) {
+  x <- gsub("\\\\", "\\\\textbackslash{}", x)
+  x <- gsub("([#$%&_{}])", "\\\\\\1", x, perl = TRUE)
+  x <- gsub("~", "\\\\textasciitilde{}", x)
+  x <- gsub("\\^", "\\\\textasciicircum{}", x)
+  x
+}
+
+report_filename_latex <- latex_escape(report_filename)
+
+kbl <- function(x, digits = NULL, row.names = FALSE) {
+  fmt <- if (knitr::is_latex_output()) "latex" else "pipe"
+  x_df <- as.data.frame(x)
+
+  args <- list(
+    x = x_df,
+    format = fmt,
+    booktabs = knitr::is_latex_output(),
+    row.names = row.names
+  )
+
+  if (!is.null(digits) && length(digits) >= 1) {
+    args$digits <- digits
+  } else {
+    num_idx <- vapply(x_df, is.numeric, logical(1))
+    if (any(num_idx)) {
+      args$digits <- 3
+    }
+  }
+
+  if (knitr::is_latex_output()) {
+    args$longtable <- nrow(x_df) > 24
+  }
+
+  out <- do.call(knitr::kable, args)
+
+  if (knitr::is_latex_output()) {
+    out <- paste0(
+      "\\begingroup\\setlength{\\tabcolsep}{4pt}\\renewcommand{\\arraystretch}{0.92}\\small\n",
+      out,
+      "\n\\endgroup"
+    )
+  }
+
+  out
+}
+```
+
+```{r}
+#| results: asis
+
+cat(
+  "\\pagestyle{fancy}\n",
+  "\\fancyhf{}\n",
+  "\\fancyfoot[C]{\\thepage/\\pageref{LastPage}}\n",
+  "\\fancyfoot[R]{\\texttt{", report_filename_latex, "}}\n",
+  "\\renewcommand{\\headrulewidth}{0pt}\n",
+  "\\renewcommand{\\footrulewidth}{0pt}\n",
+  sep = ""
+)
+
+cat("\\noindent\\textbf{Reported on ", reported_date, " at ", reported_time, "}\\par\\medskip\n\n", sep = "")
+
+if (include_summary) {
+  cat("\n\n# Summary\n\n")
+  summary_tbl <- PmetricsReports:::summary_table(res)
+  cat(kbl(summary_tbl), "\n\n", sep = "")
+}
+
+if (include_obs_pred) {
+  cat("\n\n# Observed vs Predicted {-}\n\n")
+
+  all_outeq <- PmetricsReports:::available_outeq(res)
+  selected_outeq <- if (length(outeq)) intersect(all_outeq, as.integer(outeq)) else all_outeq
+
+  if (!length(selected_outeq)) {
+    cat("No output equations available for observed vs predicted plots.\n\n")
+  } else {
+    old_h <- knitr::opts_current$get("fig.height")
+    old_w <- knitr::opts_current$get("fig.width")
+    knitr::opts_current$set(fig.height = 2.6, fig.width = 6.8)
+    on.exit(knitr::opts_current$set(fig.height = old_h, fig.width = old_w), add = TRUE)
+
+    for (oq in selected_outeq) {
+      if (oq != selected_outeq[[1]]) {
+        cat("\n\\newpage\n")
+      }
+
+      cat("\n\n## Outeq ", oq, "\n\n", sep = "")
+
+      cat("\n\n### Population Prediction\n\n")
+      print(PmetricsReports:::build_op_plot(
+        res = res,
+        icen = icen,
+        pred_type = "pop",
+        outeq = oq,
+        block = block,
+        resid = FALSE
+      ))
+
+      cat("\n\n### Posterior Prediction\n\n")
+      print(PmetricsReports:::build_op_plot(
+        res = res,
+        icen = icen,
+        pred_type = "post",
+        outeq = oq,
+        block = block,
+        resid = FALSE
+      ))
+      cat("\n")
+    }
+  }
+}
+
+if (include_metrics) {
+  cat("\n\n## Prediction Metrics\n\n")
+  metrics_tbl <- PmetricsReports:::prediction_metrics_display_table(
+    res = res,
+    icen = icen,
+    pred_type = pred_type,
+    outeq = if (length(outeq)) as.integer(outeq) else PmetricsReports:::available_outeq(res),
+    block = block
+  )
+
+  if (nrow(metrics_tbl)) {
+    cat(kbl(metrics_tbl, digits = 3, row.names = FALSE), "\n\n", sep = "")
+  } else {
+    cat("No prediction metrics available for the current selection.\n\n")
+  }
+}
+
+if (include_residuals) {
+  cat("\n\n## Residuals by Time\n\n")
+  print(PmetricsReports:::build_op_plot(
+    res = res,
+    icen = icen,
+    pred_type = pred_type,
+    outeq = if (length(outeq)) as.integer(outeq) else PmetricsReports:::available_outeq(res),
+    block = block,
+    resid = TRUE
+  ))
+
+  cat("\n\n## Residuals by Concentration\n\n")
+  print(PmetricsReports:::build_residual_conc_plot(
+    res = res,
+    icen = icen,
+    pred_type = pred_type,
+    outeq = if (length(outeq)) as.integer(outeq) else PmetricsReports:::available_outeq(res),
+    block = block
+  ))
+}
+
+if (include_parameters) {
+  cat("\n\n# Parameters\n\n")
+
+  cat("\n\n## Summaries\n\n")
+  summary_tbl <- PmetricsReports:::parameter_summary_table(res)
+  if (nrow(summary_tbl)) {
+    cat(kbl(summary_tbl, digits = 3), "\n\n", sep = "")
+  } else {
+    cat("No parameter summary data available.\n\n")
+  }
+
+  cat("\n\n## Support Points\n\n")
+  support_tbl <- PmetricsReports:::support_points_table(res)
+  if (nrow(support_tbl)) {
+    cat(kbl(support_tbl, digits = 3), "\n\n", sep = "")
+  } else {
+    cat("No support points available.\n\n")
+  }
+
+  cat("\n\n## Covariances\n\n")
+  cov_tbl <- PmetricsReports:::covariance_matrix_table(res)
+  if (nrow(cov_tbl)) {
+    cat(kbl(cov_tbl, digits = 4), "\n\n", sep = "")
+  } else {
+    cat("No covariance matrix available.\n\n")
+  }
+
+  cat("\n\n## Correlations\n\n")
+  cor_tbl <- PmetricsReports:::correlation_matrix_table(res)
+  if (nrow(cor_tbl)) {
+    cat(kbl(cor_tbl, digits = 4), "\n\n", sep = "")
+  } else {
+    cat("No correlation matrix available.\n\n")
+  }
+
+  cat("\n\n## Marginal Distributions\n\n")
+  param_names <- PmetricsReports:::available_parameters(res)
+  for (param in param_names) {
+    cat("\n\n### ", param, "\n\n", sep = "")
+    print(PmetricsReports:::build_final_plot(res, param))
+    cat("\n")
+  }
+}
+
+if (include_cycle) {
+  cat("\n\n# Cycle Info\n\n")
+
+  cat("\n\n## Objective Function by Cycle: -2*LL\n\n")
+  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "neg2ll", gamlam_label = cycle_gamlam_label))
+
+  cat("\n\n## Objective Function by Cycle: ", cycle_ic_label, "\n\n", sep = "")
+  print(PmetricsReports:::build_cycle_objective_plot(res, metric = tolower(cycle_ic_label), gamlam_label = cycle_gamlam_label))
+
+  cat("\n\n## Objective Function by Cycle: ", cycle_gamlam_label, "\n\n", sep = "")
+  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "gamlam", gamlam_label = cycle_gamlam_label))
+
+  cat("\n\n## Objective Function by Cycle: Normalized Mean\n\n")
+  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "norm_mean", gamlam_label = cycle_gamlam_label))
+
+  cat("\n\n## Objective Function by Cycle: Normalized Median\n\n")
+  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "norm_median", gamlam_label = cycle_gamlam_label))
+
+  cat("\n\n## Objective Function by Cycle: Normalized SD\n\n")
+  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "norm_sd", gamlam_label = cycle_gamlam_label))
+
+  cat("\n\n## Objective Values Table\n\n")
+  cycle_tbl <- PmetricsReports:::cycle_objective_table(res)
+  if (nrow(cycle_tbl)) {
+    cat(kbl(cycle_tbl, digits = 4), "\n", sep = "")
+  } else {
+    cat("No cycle objective data available.\n")
+  }
+}
+```
