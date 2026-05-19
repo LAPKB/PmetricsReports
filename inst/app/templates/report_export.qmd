@@ -8,6 +8,10 @@ format:
       text: |
         \usepackage{fancyhdr}
         \usepackage{lastpage}
+        \usepackage{hyperref}
+        \usepackage{fontspec}
+        \setmonofont{Menlo}
+        \hypersetup{linktoc=all}
 params:
   res_path: NULL
   pkg_path: ""
@@ -71,8 +75,6 @@ date_format <- opts$date_format
 if (is.null(date_format) || !nzchar(date_format)) {
   date_format <- "%m/%d/%y"
 }
-reported_date <- format(Sys.time(), date_format)
-reported_time <- format(Sys.time(), "%H:%M")
 
 latex_escape <- function(x) {
   x <- gsub("\\\\", "\\\\textbackslash{}", x)
@@ -112,13 +114,49 @@ kbl <- function(x, digits = NULL, row.names = FALSE) {
 
   if (knitr::is_latex_output()) {
     out <- paste0(
-      "\\begingroup\\setlength{\\tabcolsep}{4pt}\\renewcommand{\\arraystretch}{0.92}\\small\n",
+      "\\begingroup\\ttfamily\\setlength{\\tabcolsep}{4pt}\\renewcommand{\\arraystretch}{0.92}\\small\n",
       out,
       "\n\\endgroup"
     )
   }
 
   out
+}
+
+strip_plot_labels <- function(p) {
+  p + ggplot2::labs(title = NULL, subtitle = NULL, caption = NULL, tag = NULL)
+}
+
+plot_asset_counter <- 0L
+op_plot_width <- 5
+op_plot_height <- 2.5
+residual_plot_width <- 5
+residual_plot_height <- 2.5
+parameter_plot_width <- 5
+parameter_plot_height <- 2.5
+cycle_plot_width <- 5
+cycle_plot_height <- 2.5
+
+emit_plot <- function(p, width, height) {
+  plot_asset_counter <<- plot_asset_counter + 1L
+
+  plot_dir <- file.path(getwd(), "plot_assets")
+  dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+
+  rel_path <- file.path("plot_assets", sprintf("plot-%03d.pdf", plot_asset_counter))
+  abs_path <- file.path(getwd(), rel_path)
+
+  ggplot2::ggsave(
+    filename = abs_path,
+    plot = p,
+    device = grDevices::pdf,
+    width = width,
+    height = height,
+    units = "in"
+  )
+
+  cat("![](", rel_path, "){width=", width, "in height=", height, "in}\n\n", sep = "")
+  invisible(NULL)
 }
 ```
 
@@ -135,16 +173,38 @@ cat(
   sep = ""
 )
 
-cat("\\noindent\\textbf{Reported on ", reported_date, " at ", reported_time, "}\\par\\medskip\n\n", sep = "")
-
 if (include_summary) {
   cat("\n\n# Summary\n\n")
   summary_tbl <- PmetricsReports:::summary_table(res)
-  cat(kbl(summary_tbl), "\n\n", sep = "")
+  summary_nsub <- if (nrow(summary_tbl) && !is.na(summary_tbl$subjects[[1]])) summary_tbl$subjects[[1]] else NA_integer_
+  summary_status <- if (nrow(summary_tbl) && !is.na(summary_tbl$model_status[[1]])) {
+    as.character(summary_tbl$model_status[[1]])
+  } else {
+    NA_character_
+  }
+  run_phrase <- if (!is.na(summary_status) && grepl("converg", summary_status, ignore.case = TRUE)) {
+    "converged"
+  } else {
+    "reached maximum cycles before convergence"
+  }
+
+  cat(
+    "\\noindent This report was generated on ",
+    format(Sys.time(), date_format),
+    " at ",
+    format(Sys.time(), "%H:%M"),
+    ". The fit contained ",
+    if (is.na(summary_nsub)) "NA" else summary_nsub,
+    " subjects and the run ",
+    run_phrase,
+    ".\\par\\medskip\n\n",
+    sep = ""
+  )
 }
 
 if (include_obs_pred) {
-  cat("\n\n# Observed vs Predicted {-}\n\n")
+  cat("\n\\newpage\n")
+  cat("\n\n# Observed vs. Predicted\n\n")
 
   all_outeq <- PmetricsReports:::available_outeq(res)
   selected_outeq <- if (length(outeq)) intersect(all_outeq, as.integer(outeq)) else all_outeq
@@ -152,43 +212,47 @@ if (include_obs_pred) {
   if (!length(selected_outeq)) {
     cat("No output equations available for observed vs predicted plots.\n\n")
   } else {
-    old_h <- knitr::opts_current$get("fig.height")
-    old_w <- knitr::opts_current$get("fig.width")
-    knitr::opts_current$set(fig.height = 2.6, fig.width = 6.8)
-    on.exit(knitr::opts_current$set(fig.height = old_h, fig.width = old_w), add = TRUE)
+    op_plot_count <- 0L
 
     for (oq in selected_outeq) {
-      if (oq != selected_outeq[[1]]) {
+      if (op_plot_count > 0L && op_plot_count %% 2L == 0L) {
         cat("\n\\newpage\n")
       }
 
       cat("\n\n## Outeq ", oq, "\n\n", sep = "")
 
       cat("\n\n### Population Prediction\n\n")
-      print(PmetricsReports:::build_op_plot(
+      emit_plot(strip_plot_labels(PmetricsReports:::build_op_plot(
         res = res,
         icen = icen,
         pred_type = "pop",
         outeq = oq,
         block = block,
         resid = FALSE
-      ))
+      )), width = op_plot_width, height = op_plot_height)
+      op_plot_count <- op_plot_count + 1L
+
+      if (op_plot_count > 0L && op_plot_count %% 2L == 0L) {
+        cat("\n\\newpage\n")
+      }
 
       cat("\n\n### Posterior Prediction\n\n")
-      print(PmetricsReports:::build_op_plot(
+      emit_plot(strip_plot_labels(PmetricsReports:::build_op_plot(
         res = res,
         icen = icen,
         pred_type = "post",
         outeq = oq,
         block = block,
         resid = FALSE
-      ))
+      )), width = op_plot_width, height = op_plot_height)
+      op_plot_count <- op_plot_count + 1L
       cat("\n")
     }
   }
 }
 
 if (include_metrics) {
+  cat("\n\\newpage\n")
   cat("\n\n## Prediction Metrics\n\n")
   metrics_tbl <- PmetricsReports:::prediction_metrics_display_table(
     res = res,
@@ -206,27 +270,83 @@ if (include_metrics) {
 }
 
 if (include_residuals) {
-  cat("\n\n## Residuals by Time\n\n")
-  print(PmetricsReports:::build_op_plot(
-    res = res,
-    icen = icen,
-    pred_type = pred_type,
-    outeq = if (length(outeq)) as.integer(outeq) else PmetricsReports:::available_outeq(res),
-    block = block,
-    resid = TRUE
-  ))
+  cat("\n\\newpage\n")
+  cat("\n\n## Residual Plots\n\n")
+  all_outeq <- PmetricsReports:::available_outeq(res)
+  selected_outeq <- if (length(outeq)) intersect(all_outeq, as.integer(outeq)) else all_outeq
 
-  cat("\n\n## Residuals by Concentration\n\n")
-  print(PmetricsReports:::build_residual_conc_plot(
-    res = res,
-    icen = icen,
-    pred_type = pred_type,
-    outeq = if (length(outeq)) as.integer(outeq) else PmetricsReports:::available_outeq(res),
-    block = block
-  ))
+  if (!length(selected_outeq)) {
+    cat("No output equations available for residual plots.\n\n")
+  } else {
+
+    residual_plot_count <- 0L
+
+    for (oq in selected_outeq) {
+      if (residual_plot_count > 0L && residual_plot_count %% 2L == 0L) {
+        cat("\n\\newpage\n")
+      }
+
+      cat("\n\n### Outeq ", oq, "\n\n", sep = "")
+
+      cat("\n\n#### Population: Residuals by Time\n\n")
+      emit_plot(strip_plot_labels(PmetricsReports:::build_op_plot(
+        res = res,
+        icen = icen,
+        pred_type = "pop",
+        outeq = oq,
+        block = block,
+        resid = TRUE
+      )), width = residual_plot_width, height = residual_plot_height)
+      residual_plot_count <- residual_plot_count + 1L
+
+      if (residual_plot_count > 0L && residual_plot_count %% 2L == 0L) {
+        cat("\n\\newpage\n")
+      }
+
+      cat("\n\n#### Population: Residuals by Concentration\n\n")
+      emit_plot(strip_plot_labels(PmetricsReports:::build_residual_conc_plot(
+        res = res,
+        icen = icen,
+        pred_type = "pop",
+        outeq = oq,
+        block = block
+      )), width = residual_plot_width, height = residual_plot_height)
+      residual_plot_count <- residual_plot_count + 1L
+
+      if (residual_plot_count > 0L && residual_plot_count %% 2L == 0L) {
+        cat("\n\\newpage\n")
+      }
+
+      cat("\n\n#### Posterior: Residuals by Time\n\n")
+      emit_plot(strip_plot_labels(PmetricsReports:::build_op_plot(
+        res = res,
+        icen = icen,
+        pred_type = "post",
+        outeq = oq,
+        block = block,
+        resid = TRUE
+      )), width = residual_plot_width, height = residual_plot_height)
+      residual_plot_count <- residual_plot_count + 1L
+
+      if (residual_plot_count > 0L && residual_plot_count %% 2L == 0L) {
+        cat("\n\\newpage\n")
+      }
+
+      cat("\n\n#### Posterior: Residuals by Concentration\n\n")
+      emit_plot(strip_plot_labels(PmetricsReports:::build_residual_conc_plot(
+        res = res,
+        icen = icen,
+        pred_type = "post",
+        outeq = oq,
+        block = block
+      )), width = residual_plot_width, height = residual_plot_height)
+      residual_plot_count <- residual_plot_count + 1L
+    }
+  }
 }
 
 if (include_parameters) {
+  cat("\n\\newpage\n")
   cat("\n\n# Parameters\n\n")
 
   cat("\n\n## Summaries\n\n")
@@ -261,37 +381,47 @@ if (include_parameters) {
     cat("No correlation matrix available.\n\n")
   }
 
+  cat("\n\\newpage\n")
   cat("\n\n## Marginal Distributions\n\n")
   param_names <- PmetricsReports:::available_parameters(res)
-  for (param in param_names) {
-    cat("\n\n### ", param, "\n\n", sep = "")
-    print(PmetricsReports:::build_final_plot(res, param))
+  for (i in seq_along(param_names)) {
+    param <- param_names[[i]]
+    if (i > 1L && (i - 1L) %% 2L == 0L) {
+      cat("\n\\newpage\n")
+    }
+    cat("\n\n### Parameter: **", param, "**\n\n", sep = "")
+    emit_plot(strip_plot_labels(PmetricsReports:::build_final_plot(res, param)), width = parameter_plot_width, height = parameter_plot_height)
     cat("\n")
   }
 }
 
 if (include_cycle) {
+  cat("\n\\newpage\n")
   cat("\n\n# Cycle Info\n\n")
 
-  cat("\n\n## Objective Function by Cycle: -2*LL\n\n")
-  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "neg2ll", gamlam_label = cycle_gamlam_label))
+  cycle_plot_defs <- list(
+    list(label = "-2*LL", metric = "neg2ll"),
+    list(label = cycle_ic_label, metric = tolower(cycle_ic_label)),
+    list(label = cycle_gamlam_label, metric = "gamlam"),
+    list(label = "Normalized Mean", metric = "norm_mean"),
+    list(label = "Normalized Median", metric = "norm_median"),
+    list(label = "Normalized SD", metric = "norm_sd")
+  )
 
-  cat("\n\n## Objective Function by Cycle: ", cycle_ic_label, "\n\n", sep = "")
-  print(PmetricsReports:::build_cycle_objective_plot(res, metric = tolower(cycle_ic_label), gamlam_label = cycle_gamlam_label))
+  for (i in seq_along(cycle_plot_defs)) {
+    if (i > 1L && (i - 1L) %% 2L == 0L) {
+      cat("\n\\newpage\n")
+    }
+    cat("\n\n## ", cycle_plot_defs[[i]]$label, "\n\n", sep = "")
+    emit_plot(strip_plot_labels(PmetricsReports:::build_cycle_objective_plot(
+      res,
+      metric = cycle_plot_defs[[i]]$metric,
+      gamlam_label = cycle_gamlam_label
+    )), width = cycle_plot_width, height = cycle_plot_height)
+  }
 
-  cat("\n\n## Objective Function by Cycle: ", cycle_gamlam_label, "\n\n", sep = "")
-  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "gamlam", gamlam_label = cycle_gamlam_label))
-
-  cat("\n\n## Objective Function by Cycle: Normalized Mean\n\n")
-  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "norm_mean", gamlam_label = cycle_gamlam_label))
-
-  cat("\n\n## Objective Function by Cycle: Normalized Median\n\n")
-  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "norm_median", gamlam_label = cycle_gamlam_label))
-
-  cat("\n\n## Objective Function by Cycle: Normalized SD\n\n")
-  print(PmetricsReports:::build_cycle_objective_plot(res, metric = "norm_sd", gamlam_label = cycle_gamlam_label))
-
-  cat("\n\n## Objective Values Table\n\n")
+  cat("\n\\newpage\n")
+  cat("\n\n## Cycle Values\n\n")
   cycle_tbl <- PmetricsReports:::cycle_objective_table(res)
   if (nrow(cycle_tbl)) {
     cat(kbl(cycle_tbl, digits = 4), "\n", sep = "")

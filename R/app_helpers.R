@@ -21,6 +21,84 @@ validate_report_result <- function(res) {
   res
 }
 
+pdf_test_sysname <- function() {
+  simulated <- getOption("PmetricsReports.pdf_test_platform", NULL)
+  if (is.null(simulated) || !nzchar(simulated)) {
+    return(tolower(Sys.info()[["sysname"]]))
+  }
+
+  simulated <- tolower(simulated)
+  if (simulated %in% c("mac", "macos", "darwin")) {
+    return("darwin")
+  }
+  if (simulated %in% c("linux", "windows")) {
+    return(simulated)
+  }
+
+  tolower(Sys.info()[["sysname"]])
+}
+
+pdf_engine_suggestion <- function() {
+  sysname <- pdf_test_sysname()
+
+  switch(
+    sysname,
+    darwin = c(
+      "x" = "A LaTeX engine is required to render PDF reports.",
+      "i" = "On macOS, install TinyTeX with {.code tinytex::install_tinytex()} or install MacTeX."
+    ),
+    linux = c(
+      "x" = "A LaTeX engine is required to render PDF reports.",
+      "i" = "On Linux, install TinyTeX with {.code tinytex::install_tinytex()} or install TeX Live from your distribution's packages."
+    ),
+    windows = c(
+      "x" = "A LaTeX engine is required to render PDF reports.",
+      "i" = "On Windows, install TinyTeX with {.code tinytex::install_tinytex()} or install MiKTeX."
+    ),
+    c(
+      "x" = "A LaTeX engine is required to render PDF reports.",
+      "i" = "Install TinyTeX with {.code tinytex::install_tinytex()} or another LaTeX distribution for your platform."
+    )
+  )
+}
+
+pdf_engine_install_instructions <- function() {
+  sysname <- pdf_test_sysname()
+
+  platform <- switch(
+    sysname,
+    darwin = "macOS",
+    linux = "Linux",
+    windows = "Windows",
+    "your platform"
+  )
+
+  note <- switch(
+    sysname,
+    darwin = "If prompted on macOS, allow required command line tools to install.",
+    linux = "If required on Linux, install system build tools first using your distribution packages.",
+    windows = "If prompted on Windows, allow TinyTeX to update PATH during installation.",
+    ""
+  )
+
+  list(
+    platform = platform,
+    commands = c(
+      "install.packages(\"tinytex\")",
+      "tinytex::install_tinytex()"
+    ),
+    note = note
+  )
+}
+
+has_latex_engine <- function() {
+  if (isTRUE(getOption("PmetricsReports.pdf_test_no_latex", FALSE))) {
+    return(FALSE)
+  }
+
+  any(nzchar(Sys.which(c("lualatex", "xelatex", "pdflatex", "latexmk"))))
+}
+
 available_outeq <- function(res) {
   if (is.null(res$op$data) || !nrow(res$op$data)) {
     return(integer(0))
@@ -323,10 +401,30 @@ cycle_objective_table <- function(res) {
     }
   }
 
+  gamlam_type <- tryCatch({
+    as.character(res$cycle$data$gamlam$type[[1]])
+  }, error = function(e) {
+    tryCatch(as.character(res$cycle$gamlam$type[[1]]), error = function(e2) NA_character_)
+  })
+
+  gamlam_label <- if (!is.na(gamlam_type) && identical(gamlam_type, "Additive")) {
+    "Lambda"
+  } else {
+    "Gamma"
+  }
+
+  gamlam_values <- rep(NA_real_, nrow(data))
+  gamlam_df <- tryCatch(as.data.frame(res$cycle$gamlam), error = function(e) NULL)
+  if (!is.null(gamlam_df) && all(c("cycle", "value") %in% names(gamlam_df))) {
+    idx <- match(data$cycle, gamlam_df$cycle)
+    gamlam_values <- gamlam_df$value[idx]
+  }
+
   data.frame(
     Cycle = as.character(as.integer(data$cycle)),
     `-2*LL` = data$neg2ll,
     stats::setNames(list(data[[ic_name]]), toupper(ic_method)),
+    stats::setNames(list(gamlam_values), gamlam_label),
     stringsAsFactors = FALSE,
     check.names = FALSE,
     row.names = NULL

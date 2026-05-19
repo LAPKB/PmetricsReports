@@ -55,7 +55,7 @@ app_ui <- function(request) {
                       width = 2,
                       shiny::checkboxInput(
                         "show_residual",
-                        label = "Residual:",
+                        label = "Residuals",
                         value = FALSE
                       )
                     )
@@ -143,7 +143,7 @@ app_ui <- function(request) {
             bslib::nav_panel(
               "Values",
               bslib::card(
-                bslib::card_header("Cycle objective values"),
+                bslib::card_header("Cycle Values"),
                 bslib::card_body(shiny::uiOutput("cycle_objective_table"))
               )
             )

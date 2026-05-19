@@ -147,8 +147,38 @@ app_server <- function(input, output, session) {
   })
 
   observeEvent(input$export_pdf_modal, {
-    default_name <- paste0("Pmetrics-report-", format(Sys.time(), "%Y%m%d-%H%M%S"), ".pdf")
+    # Temporary testing switches (set in the R console):
+    # options(PmetricsReports.pdf_test_platform = "windows")
+    # options(PmetricsReports.pdf_test_platform = "linux")
+    # options(PmetricsReports.pdf_test_platform = "macos")
+    # options(PmetricsReports.pdf_test_no_latex = TRUE)
+    # Reset with:
+    # options(PmetricsReports.pdf_test_platform = NULL, PmetricsReports.pdf_test_no_latex = FALSE)
+    default_name <- paste0("Pmetrics-report-", format(Sys.time(), "%Y%m%d-%H%M%S"))
     export_status("")
+
+    if (!has_latex_engine()) {
+      inst <- pdf_engine_install_instructions()
+      shiny::showModal(
+        shiny::modalDialog(
+          title = "LaTeX Engine Required for PDF Export",
+          htmltools::tags$p(
+            "A LaTeX engine is needed to create PDF exports."
+          ),
+          htmltools::tags$p(
+            "Detected platform: ", htmltools::tags$strong(inst$platform), "."
+          ),
+          htmltools::tags$p("Run the following commands in R:"),
+          htmltools::tags$pre(
+            paste(inst$commands, collapse = "\n")
+          ),
+          if (nzchar(inst$note)) htmltools::tags$p(inst$note),
+          easyClose = TRUE,
+          footer = shiny::modalButton("Close")
+        )
+      )
+      return(invisible(NULL))
+    }
 
     shiny::showModal(
       shiny::modalDialog(
@@ -295,8 +325,9 @@ app_server <- function(input, output, session) {
       )
     }, error = function(e) {
       export_status("")
+      msg <- conditionMessage(e)
       shiny::showNotification(
-        conditionMessage(e),
+        msg,
         type = "error",
         duration = NULL
       )
@@ -350,7 +381,7 @@ app_server <- function(input, output, session) {
         htmltools::tags$strong("Cycles: "), summary_info$cycles
       ),
       htmltools::tags$p(
-        htmltools::tags$strong("Status: "), summary_info$model_status
+        htmltools::tags$strong("Status: "), if (grepl("converg", summary_info$model_status, ignore.case = TRUE)) "Converged" else "Reached maximum cycles before convergence"
       )
     )
   })
@@ -529,7 +560,7 @@ app_server <- function(input, output, session) {
     tbl <- cycle_objective_table(res)
 
     if (!nrow(tbl)) {
-      return(htmltools::tags$em("No cycle objective data available."))
+      return(htmltools::tags$em("No cycle values data available."))
     }
 
     html_table(tbl, digits = 4)
