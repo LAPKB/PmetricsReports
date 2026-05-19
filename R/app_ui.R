@@ -73,7 +73,7 @@ app_ui <- function(request) {
                     "Prediction metrics ",
                     shiny::actionLink(
                       inputId = "metrics_info",
-                      label = "ℹ",
+                      label = htmltools::HTML("&#9432;"),
                       class = "btn btn-sm btn-outline-secondary metrics-info-btn",
                       title = "Information about bias and imprecision metrics"
                     )
@@ -158,9 +158,8 @@ app_ui <- function(request) {
 #' @noRd
 #' @importFrom golem add_resource_path bundle_resources favicon
 #' @import shiny
-#' @export
 #' 
-# The function is kept exported only to simplify packaging; it is not part of the user-facing API.
+# Internal helper for wiring static resources into the app UI.
 golem_add_external_resources <- function() {
   www_path <- app_sys("app/www")
   golem::add_resource_path("www", www_path)

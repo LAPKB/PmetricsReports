@@ -6,3 +6,4 @@
 ^dev$
 ^inst/app/templates$
 ^inst/app/www$
+^.github
