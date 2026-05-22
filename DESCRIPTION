@@ -10,23 +10,22 @@ Depends:
     R (>= 4.2)
 Imports:
     bslib,
+    callr,
     cli,
     dplyr,
     ggplot2,
     golem,
     htmltools,
+    httpuv,
     jsonlite,
-    callr,
+    pkgload,
     plotly,
     quarto,
     shiny,
     stats,
-    tools
-Suggests:
-    pkgload,
-    tinytex
-Additional_repositories:
-    https://lapkb.r-universe.dev
+    tools,
+    utils
+Additional_repositories:https://lapkb.r-universe.dev
 Config/roxygen2/version: 8.0.0
 Encoding: UTF-8
 LazyData: true
