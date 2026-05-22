@@ -282,6 +282,7 @@ app_server <- function(input, output, session) {
         execute_params = list(
           res_path  = res_rds,
           pkg_path  = pkg_path,
+          report_generated_at = report_generated_at(),
           report_filename = export_name,
           outeq     = current_outeq(),
           block     = integer(0),

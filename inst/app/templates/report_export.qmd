@@ -64,6 +64,7 @@ include_metrics <- isTRUE(params$include_metrics)
 include_residuals <- isTRUE(params$include_residuals)
 include_parameters <- isTRUE(params$include_parameters)
 include_cycle <- isTRUE(params$include_cycle)
+report_generated_at <- if (!is.null(params$report_generated_at)) params$report_generated_at else Sys.time()
 report_filename <- if (!is.null(params$report_filename) && nzchar(params$report_filename)) {
   as.character(params$report_filename)
 } else {
@@ -190,9 +191,9 @@ if (include_summary) {
 
   cat(
     "\\noindent This report was generated on ",
-    format(Sys.time(), date_format),
+    format(report_generated_at, date_format),
     " at ",
-    format(Sys.time(), "%H:%M"),
+    format(report_generated_at, "%H:%M"),
     ". The fit contained ",
     if (is.na(summary_nsub)) "NA" else summary_nsub,
     " subjects and the run ",

@@ -80,6 +80,41 @@ report_options <- function() {
   synced
 }
 
+report_generated_at <- function() {
+  ts <- golem::get_golem_options("report_generated_at")
+
+  if (is.null(ts) || !length(ts)) {
+    return(Sys.time())
+  }
+
+  if (inherits(ts, "POSIXt")) {
+    return(ts[[1]])
+  }
+
+  parsed <- tryCatch(as.POSIXct(ts[[1]]), error = function(e) NA)
+  if (is.na(parsed)) {
+    Sys.time()
+  } else {
+    parsed
+  }
+}
+
+report_browser_title <- function() {
+  opts <- report_options()
+  ts <- report_generated_at()
+  date_format <- opts$date_format
+  if (is.null(date_format) || !nzchar(date_format)) {
+    date_format <- "%m/%d/%y"
+  }
+
+  paste0(
+    "Pmetrics - ",
+    format(ts, date_format),
+    " | ",
+    format(ts, "%H:%M")
+  )
+}
+
 normalize_metric_method <- function(method, fallback) {
   if (is.null(method) || !length(method)) {
     return(fallback)
@@ -148,6 +183,11 @@ resolve_cycle_ic_method <- function(res, preferred = report_options()$ic_method)
 }
 
 get_report_result <- function() {
+  res_path <- golem::get_golem_options("res_path")
+  if (!is.null(res_path) && nzchar(res_path) && file.exists(res_path)) {
+    return(readRDS(res_path))
+  }
+
   golem::get_golem_options("res")
 }
 

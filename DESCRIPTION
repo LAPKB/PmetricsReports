@@ -16,12 +16,14 @@ Imports:
     golem,
     htmltools,
     jsonlite,
+    callr,
     plotly,
     quarto,
     shiny,
     stats,
     tools
 Suggests:
+    pkgload,
     tinytex
 Additional_repositories:
     https://lapkb.r-universe.dev

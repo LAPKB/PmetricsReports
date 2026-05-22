@@ -4,12 +4,16 @@
 \alias{run_app}
 \title{Launch the Pmetrics Reports app}
 \usage{
-run_app(res = NULL, launch.browser = TRUE, ...)
+run_app(res = NULL, launch.browser = TRUE, background = launch.browser, ...)
 }
 \arguments{
 \item{res}{A PM_result object.}
 
 \item{launch.browser}{Passed to [shiny::runApp()].}
+
+\item{background}{Launch the report in a background R process so multiple
+reports can stay open at once. Defaults to `TRUE` when
+`launch.browser = TRUE`.}
 
 \item{...}{Additional options passed into golem options.}
 }

@@ -4,6 +4,7 @@ app_ui <- function(request) {
   shiny::tagList(
     golem_add_external_resources(),
     bslib::page_fillable(
+      title = report_browser_title(),
       theme = bslib::bs_theme(
         bootswatch = "flatly",
         primary = "#2c3e50",
@@ -176,7 +177,7 @@ golem_add_external_resources <- function() {
     golem::favicon(),
     golem::bundle_resources(
       path = www_path,
-      app_title = "PmetricsReports"
+      app_title = report_browser_title()
     )
   )
 }
