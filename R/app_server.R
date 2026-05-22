@@ -1,10 +1,7 @@
 app_server <- function(input, output, session) {
   res <- validate_report_result(get_report_result())
-  pm_opts <- Pmetrics::getPMoptions()
-  ic_method <- tolower(pm_opts$ic_method)
-  if (is.null(ic_method) || !ic_method %in% c("aic", "bic")) {
-    ic_method <- "aic"
-  }
+  opts <- report_options()
+  ic_method <- resolve_cycle_ic_method(res, preferred = opts$ic_method)
   ic_label <- toupper(ic_method)
   gamlam_type <- if (!is.null(res$cycle$gamlam$type) && length(res$cycle$gamlam$type)) {
     as.character(res$cycle$gamlam$type[[1]])
@@ -108,43 +105,39 @@ app_server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$metrics_info, {
-    opts <- Pmetrics::getPMoptions()
-    bias_label <- metric_type_label(sub("^percent_", "", opts$bias_method))
-    imp_label <- metric_type_label(sub("^percent_", "", opts$imp_method))
+    opts <- report_options()
+    bias_label <- metric_type_label(normalize_metric_method(opts$bias_method, "mwe"))
+    imp_label <- metric_type_label(normalize_metric_method(opts$imp_method, "mwse"))
 
     shiny::showModal(
       shiny::modalDialog(
         title = "Bias and Imprecision Metrics",
         htmltools::tags$p(
           "Bias summarizes systematic over- or under-prediction. ",
-          "Imprecision summarizes scatter around predictions."
+          "Imprecision summarizes prediction scatter around observations"
         ),
         htmltools::tags$p(
-          "Current methods are set by PM options: ",
-          htmltools::tags$code("bias_method = "), opts$bias_method, ", ",
-          htmltools::tags$code("imp_method = "), opts$imp_method, "."
-        ),
-        htmltools::tags$p(
-          htmltools::tags$strong("Bias metric currently shown: "),
+          htmltools::tags$strong("Current bias metric: "),
           bias_label
         ),
         htmltools::tags$p(
-          htmltools::tags$strong("Imprecision metric currently shown: "),
+          htmltools::tags$strong("Current imprecision metric: "),
           imp_label
         ),
-        htmltools::tags$ul(
-          htmltools::tags$li(htmltools::tags$strong("Bias"), ": ", bias_label),
-          htmltools::tags$li(htmltools::tags$strong("Imprecision"), ": ", imp_label)
-        ),
         htmltools::tags$p(
-          "You can change these globally with ",
-          htmltools::tags$code("Pmetrics::setPMoptions(bias_method = ..., imp_method = ...)")
+          "You can change these with  ",
+          htmltools::tags$code("setPMoptions() "),  
+          "in the Pmetrics package."
         ),
         easyClose = TRUE,
         footer = shiny::modalButton("Close")
       )
     )
   })
+
+  observeEvent(input$close_app, {
+    shiny::stopApp()
+  }, ignoreInit = TRUE)
 
   observeEvent(input$export_pdf_modal, {
     # Temporary testing switches (set in the R console):

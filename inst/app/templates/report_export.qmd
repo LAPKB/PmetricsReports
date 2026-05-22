@@ -70,7 +70,7 @@ report_filename <- if (!is.null(params$report_filename) && nzchar(params$report_
   "report.pdf"
 }
 
-opts <- Pmetrics::getPMoptions()
+opts <- PmetricsReports:::report_options()
 date_format <- opts$date_format
 if (is.null(date_format) || !nzchar(date_format)) {
   date_format <- "%m/%d/%y"

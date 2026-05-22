@@ -11,8 +11,17 @@ app_ui <- function(request) {
       ),
       shiny::div(
         class = "app-banner",
-        shiny::tags$span(class = "app-banner__title", "Pmetrics Reports"),
-        shiny::actionButton("export_pdf_modal", "Export PDF", class = "btn-success app-banner__export")
+        shiny::tags$span(class = "app-banner__title", "Pmetrics Report"),
+        shiny::tags$div(
+          class = "app-banner__actions",
+          shiny::actionButton("export_pdf_modal", "Export PDF", class = "btn-success app-banner__export"),
+          shiny::actionButton(
+            "close_app",
+            "Close",
+            class = "btn-danger app-banner__close",
+            onclick = "setTimeout(function(){window.close();}, 100);"
+          )
+        )
       ),
       bslib::navset_card_tab(
         bslib::nav_panel(

@@ -20,11 +20,11 @@ knitr::opts_chunk$set(
 
   <!-- badges: end -->
 
-`PmetricsReports` is a Shiny companion app for the [Pmetrics](https://github.com/LAPKB/Pmetrics) package, designed to create reports after fitting data to models.
+`PmetricsReports` is a Shiny companion app for reviewing `PM_result` objects and creating PDF reports after fitting data to models.
 
 ## Installation
 
-`PmetricsReports` will be automatically installed as a dependency of the `Pmetrics` package. 
+Install `PmetricsReports` directly from [r-universe](https://lapkb.r-universe.dev/PmetricsReports) or from the repository source.
 
 ### If automatic installation fails...
 

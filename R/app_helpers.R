@@ -6,6 +6,147 @@ app_sys <- function(...) {
   path
 }
 
+pmoptions_user_file <- function() {
+  sysname <- tolower(Sys.info()[["sysname"]])
+
+  opt_dir <- if (sysname %in% c("darwin", "linux")) {
+    path.expand("~/.PMopts")
+  } else if (sysname == "windows") {
+    file.path(Sys.getenv("APPDATA"), "PMopts")
+  } else {
+    path.expand("~/.PMopts")
+  }
+
+  file.path(opt_dir, "PMoptions.json")
+}
+
+pmoptions_default_file <- function() {
+  installed <- system.file("options", "PMoptions.json", package = "PmetricsReports")
+  if (nzchar(installed)) {
+    return(installed)
+  }
+
+  source_path <- file.path(golem::pkg_path(), "inst", "options", "PMoptions.json")
+  if (file.exists(source_path)) {
+    return(source_path)
+  }
+
+  ""
+}
+
+read_pmoptions_file <- function(path) {
+  if (is.null(path) || !nzchar(path) || !file.exists(path)) {
+    return(list())
+  }
+
+  tryCatch(
+    jsonlite::read_json(path = path, simplifyVector = TRUE),
+    error = function(e) list()
+  )
+}
+
+report_options <- function() {
+  defaults <- read_pmoptions_file(pmoptions_default_file())
+
+  if (!length(defaults)) {
+    defaults <- list(
+      sep = ",",
+      dec = ".",
+      digits = 2,
+      show_metrics = TRUE,
+      bias_method = "percent_mwe",
+      imp_method = "percent_rmbawse",
+      ic_method = "aic",
+      report_template = "plotly",
+      date_format = "%m/%d/%y",
+      update_check = "weekly",
+      update_timeout = 1,
+      backend = "rust",
+      model_template_path = ""
+    )
+  }
+
+  user_opts <- read_pmoptions_file(pmoptions_user_file())
+  if (!length(user_opts)) {
+    return(defaults)
+  }
+
+  synced <- defaults
+  shared_names <- intersect(names(defaults), names(user_opts))
+  for (nm in shared_names) {
+    synced[[nm]] <- user_opts[[nm]]
+  }
+
+  synced
+}
+
+normalize_metric_method <- function(method, fallback) {
+  if (is.null(method) || !length(method)) {
+    return(fallback)
+  }
+
+  method <- tolower(trimws(as.character(method)[[1]]))
+  if (!nzchar(method)) {
+    return(fallback)
+  }
+
+  method <- sub("^percent_", "", method)
+  if (!nzchar(method)) {
+    fallback
+  } else {
+    method
+  }
+}
+
+resolve_metric_method <- function(method, fallback, available) {
+  method <- normalize_metric_method(method, fallback)
+  available <- tolower(available)
+
+  if (method %in% available) {
+    return(method)
+  }
+
+  if (fallback %in% available) {
+    return(fallback)
+  }
+
+  if (length(available)) {
+    return(available[[1]])
+  }
+
+  fallback
+}
+
+resolve_cycle_ic_method <- function(res, preferred = report_options()$ic_method) {
+  if (is.null(preferred) || !length(preferred)) {
+    preferred <- "aic"
+  }
+
+  preferred <- tolower(trimws(as.character(preferred)[[1]]))
+  if (!preferred %in% c("aic", "bic")) {
+    preferred <- "aic"
+  }
+
+  available <- character(0)
+  if (!is.null(res$cycle$objective)) {
+    available <- tolower(names(as.data.frame(res$cycle$objective)))
+  }
+
+  if (preferred %in% available) {
+    return(preferred)
+  }
+
+  if ("aic" %in% available) {
+    return("aic")
+  }
+
+  if ("bic" %in% available) {
+    return("bic")
+  }
+
+  preferred
+}
+
 get_report_result <- function() {
   golem::get_golem_options("res")
 }
@@ -387,11 +528,7 @@ cycle_objective_table <- function(res) {
     return(data.frame())
   }
 
-  opts <- Pmetrics::getPMoptions()
-  ic_method <- tolower(opts$ic_method)
-  if (!ic_method %in% c("aic", "bic")) {
-    ic_method <- if ("aic" %in% tolower(names(data))) "aic" else "bic"
-  }
+  ic_method <- resolve_cycle_ic_method(res)
 
   ic_name <- names(data)[tolower(names(data)) == ic_method][1]
   if (is.na(ic_name) || !nzchar(ic_name)) {
@@ -560,12 +697,12 @@ split_metrics_by_type <- function(res, icen, pred_type, outeq, block) {
   }
 
   metrics <- compute_op_metrics(data)
-  opts <- Pmetrics::getPMoptions()
-  bias_method <- opts$bias_method
-  imp_method <- opts$imp_method
+  opts <- report_options()
+  bias_method <- resolve_metric_method(opts$bias_method, "mwe", metrics$Type)
+  imp_method <- resolve_metric_method(opts$imp_method, "mwse", metrics$Type)
 
-  bias_type <- sub("^percent_", "", bias_method)
-  imp_type <- sub("^percent_", "", imp_method)
+  bias_type <- normalize_metric_method(bias_method, "mwe")
+  imp_type <- normalize_metric_method(imp_method, "mwse")
 
   bias <- metrics[metrics$Type == bias_type, , drop = FALSE]
   imprecision <- metrics[metrics$Type == imp_type, , drop = FALSE]
