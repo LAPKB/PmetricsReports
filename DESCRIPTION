@@ -1,6 +1,6 @@
 Package: PmetricsReports
 Title: Pmetrics Reports App
-Version: 0.1.0
+Version: 0.0.2
 Authors@R: 
     person("Michael", "Neely", , "mneely@usc.edu", role = c("aut", "cre"))
 Description: Standalone golem-based Shiny app for reviewing Pmetrics run
@@ -25,7 +25,7 @@ Imports:
     stats,
     tools,
     utils
-Additional_repositories:https://lapkb.r-universe.dev
+Additional_repositories: https://lapkb.r-universe.dev
 Config/roxygen2/version: 8.0.0
 Encoding: UTF-8
 LazyData: true
