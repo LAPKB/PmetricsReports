@@ -1,5 +1,5 @@
-Package: PmetricsReports
-Title: Pmetrics Reports App
+Package: PmetricsReport
+Title: Pmetrics Report App
 Version: 0.0.2
 Authors@R: 
     person("Michael", "Neely", , "mneely@usc.edu", role = c("aut", "cre"))
