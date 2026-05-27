@@ -81,6 +81,11 @@ report_options <- function() {
 }
 
 report_generated_at <- function() {
+  live_generated_at <- get_live_report_generated_at()
+  if (!is.null(live_generated_at) && inherits(live_generated_at, "POSIXt")) {
+    return(live_generated_at[[1]])
+  }
+
   ts <- golem::get_golem_options("report_generated_at")
 
   if (is.null(ts) || !length(ts)) {
@@ -183,6 +188,11 @@ resolve_cycle_ic_method <- function(res, preferred = report_options()$ic_method)
 }
 
 get_report_result <- function() {
+  live_result <- get_live_report_result()
+  if (inherits(live_result, "PM_result")) {
+    return(live_result)
+  }
+
   res_path <- golem::get_golem_options("res_path")
   if (!is.null(res_path) && nzchar(res_path) && file.exists(res_path)) {
     return(readRDS(res_path))
@@ -222,8 +232,7 @@ pdf_test_sysname <- function() {
 pdf_engine_suggestion <- function() {
   sysname <- pdf_test_sysname()
 
-  switch(
-    sysname,
+  switch(sysname,
     darwin = c(
       "x" = "A LaTeX engine is required to render PDF reports.",
       "i" = "On macOS, install TinyTeX with {.code tinytex::install_tinytex()} or install MacTeX."
@@ -246,16 +255,14 @@ pdf_engine_suggestion <- function() {
 pdf_engine_install_instructions <- function() {
   sysname <- pdf_test_sysname()
 
-  platform <- switch(
-    sysname,
+  platform <- switch(sysname,
     darwin = "macOS",
     linux = "Linux",
     windows = "Windows",
     "your platform"
   )
 
-  note <- switch(
-    sysname,
+  note <- switch(sysname,
     darwin = "If prompted on macOS, allow required command line tools to install.",
     linux = "If required on Linux, install system build tools first using your distribution packages.",
     windows = "If prompted on Windows, allow TinyTeX to update PATH during installation.",
@@ -408,7 +415,9 @@ build_op_plot <- function(res, icen, pred_type, outeq, block, resid = FALSE) {
   }
 
   if (!nrow(data)) {
-    return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "No PM_op data available for the current selection."))
+    return(ggplot2::ggplot() +
+      ggplot2::theme_void() +
+      ggplot2::labs(title = "No PM_op data available for the current selection."))
   }
 
   if (!resid) {
@@ -446,7 +455,9 @@ build_residual_conc_plot <- function(res, icen, pred_type, outeq, block) {
   }
 
   if (!nrow(data)) {
-    return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "No PM_op data available for the current selection."))
+    return(ggplot2::ggplot() +
+      ggplot2::theme_void() +
+      ggplot2::labs(title = "No PM_op data available for the current selection."))
   }
 
   ggplot2::ggplot(data, ggplot2::aes(x = obs, y = wd)) +
@@ -463,7 +474,9 @@ build_residual_conc_plot <- function(res, icen, pred_type, outeq, block) {
 
 build_final_plot <- function(res, parameter) {
   if (is.null(parameter) || !nzchar(parameter)) {
-    return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "Choose a parameter to display."))
+    return(ggplot2::ggplot() +
+      ggplot2::theme_void() +
+      ggplot2::labs(title = "Choose a parameter to display."))
   }
 
   ab <- data.frame(res$final$ab)
@@ -471,7 +484,9 @@ build_final_plot <- function(res, parameter) {
   if (!is.null(res$final$popPoints)) {
     data <- res$final$popPoints
     if (is.null(data) || !nrow(data) || !parameter %in% names(data)) {
-      return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "Selected parameter not found."))
+      return(ggplot2::ggplot() +
+        ggplot2::theme_void() +
+        ggplot2::labs(title = "Selected parameter not found."))
     }
 
     limits <- ab[ab$par == parameter, , drop = FALSE]
@@ -491,7 +506,9 @@ build_final_plot <- function(res, parameter) {
     sd <- res$final$popSD[[parameter]]
     limits <- ab[ab$par == parameter, , drop = FALSE]
     if (length(mean) == 0 || length(sd) == 0) {
-      return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "Selected parameter not found."))
+      return(ggplot2::ggplot() +
+        ggplot2::theme_void() +
+        ggplot2::labs(title = "Selected parameter not found."))
     }
 
     x <- seq(limits$min[1], limits$max[1], length.out = 200)
@@ -578,11 +595,14 @@ cycle_objective_table <- function(res) {
     }
   }
 
-  gamlam_type <- tryCatch({
-    as.character(res$cycle$data$gamlam$type[[1]])
-  }, error = function(e) {
-    tryCatch(as.character(res$cycle$gamlam$type[[1]]), error = function(e2) NA_character_)
-  })
+  gamlam_type <- tryCatch(
+    {
+      as.character(res$cycle$data$gamlam$type[[1]])
+    },
+    error = function(e) {
+      tryCatch(as.character(res$cycle$gamlam$type[[1]]), error = function(e2) NA_character_)
+    }
+  )
 
   gamlam_label <- if (!is.na(gamlam_type) && identical(gamlam_type, "Additive")) {
     "Lambda"
@@ -610,24 +630,32 @@ cycle_objective_table <- function(res) {
 
 build_cycle_objective_plot <- function(res, metric = "neg2ll", gamlam_label = "Gamma") {
   if (is.null(res$cycle$objective)) {
-    return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "No cycle objective data available."))
+    return(ggplot2::ggplot() +
+      ggplot2::theme_void() +
+      ggplot2::labs(title = "No cycle objective data available."))
   }
 
   data <- as.data.frame(res$cycle$objective)
   if (!"cycle" %in% names(data)) {
-    return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "Cycle objective data incomplete."))
+    return(ggplot2::ggplot() +
+      ggplot2::theme_void() +
+      ggplot2::labs(title = "Cycle objective data incomplete."))
   }
 
   metric <- tolower(metric)
 
   if (metric == "gamlam") {
     if (is.null(res$cycle$gamlam)) {
-      return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "No gamma/lambda cycle data available."))
+      return(ggplot2::ggplot() +
+        ggplot2::theme_void() +
+        ggplot2::labs(title = "No gamma/lambda cycle data available."))
     }
 
     gamlam_df <- as.data.frame(res$cycle$gamlam)
     if (!all(c("cycle", "value") %in% names(gamlam_df))) {
-      return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "Gamma/lambda cycle data incomplete."))
+      return(ggplot2::ggplot() +
+        ggplot2::theme_void() +
+        ggplot2::labs(title = "Gamma/lambda cycle data incomplete."))
     }
 
     ggplot2::ggplot(gamlam_df, ggplot2::aes(x = cycle, y = value)) +
@@ -646,17 +674,23 @@ build_cycle_objective_plot <- function(res, metric = "neg2ll", gamlam_label = "G
 
     norm_tbl <- res$cycle[[norm_source]]
     if (is.null(norm_tbl)) {
-      return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "No normalized cycle data available."))
+      return(ggplot2::ggplot() +
+        ggplot2::theme_void() +
+        ggplot2::labs(title = "No normalized cycle data available."))
     }
 
     norm_df <- as.data.frame(norm_tbl)
     if (!"cycle" %in% names(norm_df)) {
-      return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "Normalized cycle data incomplete."))
+      return(ggplot2::ggplot() +
+        ggplot2::theme_void() +
+        ggplot2::labs(title = "Normalized cycle data incomplete."))
     }
 
     param_cols <- setdiff(names(norm_df), "cycle")
     if (!length(param_cols)) {
-      return(ggplot2::ggplot() + ggplot2::theme_void() + ggplot2::labs(title = "No parameter columns available for normalization plot."))
+      return(ggplot2::ggplot() +
+        ggplot2::theme_void() +
+        ggplot2::labs(title = "No parameter columns available for normalization plot."))
     }
 
     long_df <- do.call(
@@ -699,8 +733,7 @@ build_cycle_objective_plot <- function(res, metric = "neg2ll", gamlam_label = "G
 
     data$criterion_value <- data[[metric_name]]
 
-    y_label <- switch(
-      tolower(metric_name),
+    y_label <- switch(tolower(metric_name),
       neg2ll = "-2 Log Likelihood",
       aic = "AIC",
       bic = "BIC",

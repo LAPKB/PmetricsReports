@@ -1,4 +1,8 @@
 app_ui <- function(request) {
+  if (is_live_session_mode() && !inherits(get_report_result(), "PM_result") && !inherits(get_live_report_result(), "PM_result")) {
+    return(live_app_ui())
+  }
+
   res <- validate_report_result(get_report_result())
 
   shiny::tagList(
@@ -168,7 +172,7 @@ app_ui <- function(request) {
 #' @noRd
 #' @importFrom golem add_resource_path bundle_resources favicon
 #' @import shiny
-#' 
+#'
 # Internal helper for wiring static resources into the app UI.
 golem_add_external_resources <- function() {
   www_path <- app_sys("app/www")

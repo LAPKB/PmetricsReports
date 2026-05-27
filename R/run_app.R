@@ -11,8 +11,13 @@
 run_app <- function(res = NULL, launch.browser = TRUE, background = launch.browser, ...) {
   report_generated_at <- Sys.time()
 
-  if (isTRUE(launch.browser) && isTRUE(background)) {
-    return(invisible(run_app_background(res = res, report_generated_at = report_generated_at, ...)))
+  if (isTRUE(background)) {
+    return(invisible(run_app_background(
+      res = res,
+      report_generated_at = report_generated_at,
+      launch.browser = launch.browser,
+      ...
+    )))
   }
 
   app <- golem::with_golem_options(
@@ -31,7 +36,52 @@ report_app <- function(res = NULL, launch.browser = TRUE, ...) {
   run_app(res = res, launch.browser = launch.browser, ...)
 }
 
-run_app_background <- function(res = NULL, report_generated_at = Sys.time(), ...) {
+report_process_runtime <- local({
+  runtime <- new.env(parent = emptyenv())
+  runtime$processes <- list()
+  runtime
+})
+
+prune_retained_report_processes <- function() {
+  retained <- report_process_runtime$processes
+  if (!length(retained)) {
+    return(retained)
+  }
+
+  kept <- retained[vapply(retained, function(process) {
+    isTRUE(tryCatch(process$is_alive(), error = function(e) FALSE))
+  }, logical(1))]
+
+  report_process_runtime$processes <- kept
+  kept
+}
+
+retain_report_process <- function(process) {
+  retained <- prune_retained_report_processes()
+  key <- tryCatch(as.character(process$get_pid()), error = function(e) NULL)
+  if (is.null(key) || !nzchar(key)) {
+    key <- paste0("retained-", length(retained) + 1L)
+  }
+
+  retained[[key]] <- process
+  report_process_runtime$processes <- retained
+  invisible(process)
+}
+
+retained_report_process_count <- function() {
+  length(prune_retained_report_processes())
+}
+
+clear_retained_report_processes <- function() {
+  report_process_runtime$processes <- list()
+  invisible(TRUE)
+}
+
+run_app_background <- function(
+    res = NULL,
+    report_generated_at = Sys.time(),
+    launch.browser = TRUE,
+    ...) {
   launch_dir <- tempfile("PmetricsReports-launch-")
   dir.create(launch_dir, recursive = TRUE)
 
@@ -39,7 +89,10 @@ run_app_background <- function(res = NULL, report_generated_at = Sys.time(), ...
   saveRDS(res, res_path)
 
   port_file <- file.path(launch_dir, "port.txt")
-  pkg_path <- tryCatch(golem::pkg_path(), error = function(e) "")
+  pkg_path <- tryCatch(
+    getNamespaceInfo(asNamespace("PmetricsReports"), "path"),
+    error = function(e) ""
+  )
   golem_opts <- list(res_path = res_path, report_generated_at = report_generated_at)
   extra_opts <- list(...)
 
@@ -49,6 +102,18 @@ run_app_background <- function(res = NULL, report_generated_at = Sys.time(), ...
         pkgload::load_all(pkg_path, quiet = TRUE)
       } else {
         library(PmetricsReports)
+      }
+
+      live_session <- if (is.list(extra_opts$live_session)) {
+        unclass(extra_opts$live_session)
+      } else {
+        NULL
+      }
+
+      if (is.list(live_session)) {
+        get("prime_live_session_connection", envir = asNamespace("PmetricsReports"))(live_session)
+        golem_opts$live_session <- live_session
+        extra_opts$live_session <- NULL
       }
 
       app <- golem::with_golem_options(
@@ -78,17 +143,48 @@ run_app_background <- function(res = NULL, report_generated_at = Sys.time(), ...
   )
 
   port <- NA_integer_
-  deadline <- Sys.time() + 10
-  while (!file.exists(port_file) && Sys.time() < deadline) {
+  deadline <- Sys.time() + 30
+  while (!file.exists(port_file) && process$is_alive() && Sys.time() < deadline) {
     Sys.sleep(0.05)
   }
+
+  if (!process$is_alive()) {
+    startup_output <- c(
+      tryCatch(process$read_all_error_lines(), error = function(e) character()),
+      tryCatch(process$read_all_output_lines(), error = function(e) character())
+    )
+    startup_output <- startup_output[nzchar(startup_output)]
+    cli::cli_abort(c(
+      "x" = "PmetricsReports app process exited before startup completed.",
+      if (length(startup_output)) paste(startup_output, collapse = "\n")
+    ))
+  }
+
   if (file.exists(port_file)) {
     port <- suppressWarnings(as.integer(readLines(port_file, warn = FALSE)[1]))
   }
 
-  if (is.finite(port) && !is.na(port)) {
-    utils::browseURL(sprintf("http://127.0.0.1:%s", port))
+  app_url <- if (is.finite(port) && !is.na(port)) {
+    sprintf("http://127.0.0.1:%s", port)
+  } else {
+    NULL
   }
+
+  if (is.null(app_url) || !nzchar(app_url)) {
+    cli::cli_abort(c(
+      "x" = "PmetricsReports app did not report a local URL before the startup timeout expired."
+    ))
+  }
+
+  if (isTRUE(launch.browser) && !is.null(app_url)) {
+    utils::browseURL(app_url)
+  }
+
+  attr(process, "app_url") <- app_url
+  attr(process, "launch_dir") <- launch_dir
+  attr(process, "res_path") <- res_path
+
+  retain_report_process(process)
 
   invisible(process)
 }

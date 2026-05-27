@@ -1,4 +1,8 @@
 app_server <- function(input, output, session) {
+  if (is_live_session_mode() && !inherits(get_report_result(), "PM_result") && !inherits(get_live_report_result(), "PM_result")) {
+    return(live_app_server(input, output, session))
+  }
+
   res <- validate_report_result(get_report_result())
   opts <- report_options()
   ic_method <- resolve_cycle_ic_method(res, preferred = opts$ic_method)
@@ -80,10 +84,13 @@ app_server <- function(input, output, session) {
     }
   })
 
-  observeEvent(input$parameter_select, {
-    shiny::req(input$parameter_select)
-    selected_parameter(input$parameter_select)
-  }, ignoreInit = TRUE)
+  observeEvent(input$parameter_select,
+    {
+      shiny::req(input$parameter_select)
+      selected_parameter(input$parameter_select)
+    },
+    ignoreInit = TRUE
+  )
 
   observeEvent(input$prev_outeq, {
     index <- current_outeq_index()
@@ -99,10 +106,13 @@ app_server <- function(input, output, session) {
     }
   })
 
-  observeEvent(input$outeq_select, {
-    shiny::req(input$outeq_select)
-    selected_outeq(as.integer(input$outeq_select))
-  }, ignoreInit = TRUE)
+  observeEvent(input$outeq_select,
+    {
+      shiny::req(input$outeq_select)
+      selected_outeq(as.integer(input$outeq_select))
+    },
+    ignoreInit = TRUE
+  )
 
   observeEvent(input$metrics_info, {
     opts <- report_options()
@@ -126,7 +136,7 @@ app_server <- function(input, output, session) {
         ),
         htmltools::tags$p(
           "You can change these with  ",
-          htmltools::tags$code("setPMoptions() "),  
+          htmltools::tags$code("setPMoptions() "),
           "in the Pmetrics package."
         ),
         easyClose = TRUE,
@@ -135,9 +145,12 @@ app_server <- function(input, output, session) {
     )
   })
 
-  observeEvent(input$close_app, {
-    shiny::stopApp()
-  }, ignoreInit = TRUE)
+  observeEvent(input$close_app,
+    {
+      shiny::stopApp()
+    },
+    ignoreInit = TRUE
+  )
 
   observeEvent(input$export_pdf_modal, {
     # Temporary testing switches (set in the R console):
@@ -232,101 +245,107 @@ app_server <- function(input, output, session) {
     )
   })
 
-  observeEvent(input$export_pdf_run, {
-    export_status("Rendering PDF...")
+  observeEvent(input$export_pdf_run,
+    {
+      export_status("Rendering PDF...")
 
-    tryCatch({
-      if (!requireNamespace("quarto", quietly = TRUE)) {
-        cli::cli_abort(c(
-          "x" = "The {.pkg quarto} package is required to export PDF reports.",
-          "i" = "Install it, then try Export PDF again."
-        ))
-      }
+      tryCatch(
+        {
+          if (!requireNamespace("quarto", quietly = TRUE)) {
+            cli::cli_abort(c(
+              "x" = "The {.pkg quarto} package is required to export PDF reports.",
+              "i" = "Install it, then try Export PDF again."
+            ))
+          }
 
-      output_dir <- input$pdf_output_dir
-      if (is.null(output_dir) || !nzchar(trimws(output_dir))) {
-        output_dir <- path.expand("~/Downloads")
-      }
-      output_dir <- path.expand(trimws(output_dir))
-      dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+          output_dir <- input$pdf_output_dir
+          if (is.null(output_dir) || !nzchar(trimws(output_dir))) {
+            output_dir <- path.expand("~/Downloads")
+          }
+          output_dir <- path.expand(trimws(output_dir))
+          dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-      export_name <- input$pdf_filename
-      if (is.null(export_name) || !nzchar(trimws(export_name))) {
-        export_name <- paste0("pmetrics-report-", format(Sys.time(), "%Y%m%d-%H%M%S"), ".pdf")
-      }
-      if (!grepl("\\\\.pdf$", export_name, ignore.case = TRUE)) {
-        export_name <- paste0(export_name, ".pdf")
-      }
+          export_name <- input$pdf_filename
+          if (is.null(export_name) || !nzchar(trimws(export_name))) {
+            export_name <- paste0("pmetrics-report-", format(Sys.time(), "%Y%m%d-%H%M%S"), ".pdf")
+          }
+          if (!grepl("\\\\.pdf$", export_name, ignore.case = TRUE)) {
+            export_name <- paste0(export_name, ".pdf")
+          }
 
-      work_dir <- tempfile("pmetrics_export_")
-      dir.create(work_dir, recursive = TRUE)
-      work_dir <- normalizePath(work_dir, mustWork = TRUE)
-      on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
+          work_dir <- tempfile("pmetrics_export_")
+          dir.create(work_dir, recursive = TRUE)
+          work_dir <- normalizePath(work_dir, mustWork = TRUE)
+          on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
 
-      qmd_path <- file.path(work_dir, "report.qmd")
-      res_rds  <- file.path(work_dir, "res.rds")
+          qmd_path <- file.path(work_dir, "report.qmd")
+          res_rds <- file.path(work_dir, "res.rds")
 
-      template <- app_sys("app/templates/report_export.qmd")
-      file.copy(template, qmd_path, overwrite = TRUE)
-      saveRDS(res, res_rds)
+          template <- app_sys("app/templates/report_export.qmd")
+          file.copy(template, qmd_path, overwrite = TRUE)
+          saveRDS(res, res_rds)
 
-      pkg_path <- tryCatch(golem::pkg_path(), error = function(e) "")
-      selected_sections <- input$pdf_sections
-      if (is.null(selected_sections) || !length(selected_sections)) {
-        selected_sections <- c("summary", "obs_pred", "metrics", "residuals", "parameters", "cycle")
-      }
+          pkg_path <- tryCatch(golem::pkg_path(), error = function(e) "")
+          selected_sections <- input$pdf_sections
+          if (is.null(selected_sections) || !length(selected_sections)) {
+            selected_sections <- c("summary", "obs_pred", "metrics", "residuals", "parameters", "cycle")
+          }
 
-      quarto::quarto_render(
-        input = qmd_path,
-        output_format = "pdf",
-        execute_params = list(
-          res_path  = res_rds,
-          pkg_path  = pkg_path,
-          report_generated_at = report_generated_at(),
-          report_filename = export_name,
-          outeq     = current_outeq(),
-          block     = integer(0),
-          pred_type = input$pred_type,
-          icen      = input$icen,
-          cycle_mode = "all",
-          cycle_gamlam_label = gamlam_label,
-          cycle_ic_label = ic_label,
-          parameter = current_parameter(),
-          include_summary = "summary" %in% selected_sections,
-          include_obs_pred = "obs_pred" %in% selected_sections,
-          include_metrics = "metrics" %in% selected_sections,
-          include_residuals = "residuals" %in% selected_sections,
-          include_parameters = "parameters" %in% selected_sections,
-          include_cycle = "cycle" %in% selected_sections
-        ),
-        quiet = FALSE
+          quarto::quarto_render(
+            input = qmd_path,
+            output_format = "pdf",
+            execute_params = list(
+              res_path = res_rds,
+              pkg_path = pkg_path,
+              report_generated_at = report_generated_at(),
+              report_filename = export_name,
+              outeq = current_outeq(),
+              block = integer(0),
+              pred_type = input$pred_type,
+              icen = input$icen,
+              cycle_mode = "all",
+              cycle_gamlam_label = gamlam_label,
+              cycle_ic_label = ic_label,
+              parameter = current_parameter(),
+              include_summary = "summary" %in% selected_sections,
+              include_obs_pred = "obs_pred" %in% selected_sections,
+              include_metrics = "metrics" %in% selected_sections,
+              include_residuals = "residuals" %in% selected_sections,
+              include_parameters = "parameters" %in% selected_sections,
+              include_cycle = "cycle" %in% selected_sections
+            ),
+            quiet = FALSE
+          )
+
+          rendered <- file.path(work_dir, "report.pdf")
+          if (!file.exists(rendered)) {
+            stop("PDF export failed: 'report.pdf' was not produced in the work directory.")
+          }
+
+          final_path <- file.path(output_dir, export_name)
+          file.copy(rendered, final_path, overwrite = TRUE)
+
+          shiny::removeModal(session = session)
+          export_status("")
+          shiny::showNotification(
+            paste("PDF saved to:", final_path),
+            type = "message",
+            duration = 6
+          )
+        },
+        error = function(e) {
+          export_status("")
+          msg <- conditionMessage(e)
+          shiny::showNotification(
+            msg,
+            type = "error",
+            duration = NULL
+          )
+        }
       )
-
-      rendered <- file.path(work_dir, "report.pdf")
-      if (!file.exists(rendered)) {
-        stop("PDF export failed: 'report.pdf' was not produced in the work directory.")
-      }
-
-      final_path <- file.path(output_dir, export_name)
-      file.copy(rendered, final_path, overwrite = TRUE)
-
-      shiny::removeModal(session = session)
-      export_status("")
-      shiny::showNotification(
-        paste("PDF saved to:", final_path),
-        type = "message",
-        duration = 6
-      )
-    }, error = function(e) {
-      export_status("")
-      msg <- conditionMessage(e)
-      shiny::showNotification(
-        msg,
-        type = "error",
-        duration = NULL
-      )
-    })
-  }, ignoreInit = TRUE)
+    },
+    ignoreInit = TRUE
+  )
 
   output$parameter_nav <- shiny::renderUI({
     if (!length(parameter_choices)) {
@@ -559,5 +578,4 @@ app_server <- function(input, output, session) {
 
     html_table(tbl, digits = 4)
   })
-
 }
