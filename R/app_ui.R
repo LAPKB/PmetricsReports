@@ -171,7 +171,13 @@ app_ui <- function(request) {
 #' 
 # Internal helper for wiring static resources into the app UI.
 golem_add_external_resources <- function() {
-  www_path <- app_sys("app/www")
+  # Use pre-calculated path from golem options if available (from remote app launch)
+  # Otherwise fall back to app_sys for local launches
+  www_path <- golem::get_golem_options("www_path")
+  if (is.null(www_path) || !nzchar(www_path)) {
+    www_path <- app_sys("app/www")
+  }
+  
   golem::add_resource_path("www", www_path)
   shiny::tags$head(
     golem::favicon(),

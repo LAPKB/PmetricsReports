@@ -266,7 +266,12 @@ app_server <- function(input, output, session) {
       qmd_path <- file.path(work_dir, "report.qmd")
       res_rds  <- file.path(work_dir, "res.rds")
 
-      template <- app_sys("app/templates/report_export.qmd")
+      # Use pre-calculated path from golem options if available (from remote app launch)
+      # Otherwise fall back to app_sys for local launches
+      template <- golem::get_golem_options("template_path")
+      if (is.null(template) || !nzchar(template)) {
+        template <- app_sys("app/templates/report_export.qmd")
+      }
       file.copy(template, qmd_path, overwrite = TRUE)
       saveRDS(res, res_rds)
 
@@ -279,6 +284,7 @@ app_server <- function(input, output, session) {
       quarto::quarto_render(
         input = qmd_path,
         output_format = "pdf",
+        execute_dir = work_dir,
         execute_params = list(
           res_path  = res_rds,
           pkg_path  = pkg_path,

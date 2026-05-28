@@ -39,36 +39,59 @@ run_app_background <- function(res = NULL, report_generated_at = Sys.time(), ...
   saveRDS(res, res_path)
 
   port_file <- file.path(launch_dir, "port.txt")
-  pkg_path <- tryCatch(golem::pkg_path(), error = function(e) "")
-  golem_opts <- list(res_path = res_path, report_generated_at = report_generated_at)
+  err_file <- file.path(launch_dir, "error.txt")
+  
+  # Calculate resource paths in the main process where context is known
+  # This avoids path resolution issues in the background process
+  www_path <- tryCatch(
+    app_sys("app/www"),
+    error = function(e) system.file("app/www", package = "PmetricsReports")
+  )
+  template_path <- tryCatch(
+    app_sys("app/templates/report_export.qmd"),
+    error = function(e) system.file("app/templates/report_export.qmd", package = "PmetricsReports")
+  )
+  
+  golem_opts <- list(
+    res_path = res_path,
+    report_generated_at = report_generated_at,
+    www_path = www_path,
+    template_path = template_path
+  )
   extra_opts <- list(...)
 
   process <- callr::r_bg(
-    function(pkg_path, port_file, golem_opts, extra_opts) {
-      if (nzchar(pkg_path) && requireNamespace("pkgload", quietly = TRUE)) {
-        pkgload::load_all(pkg_path, quiet = TRUE)
-      } else {
+    function(www_path, template_path, port_file, err_file, golem_opts, extra_opts) {
+      tryCatch({
         library(PmetricsReports)
-      }
 
-      app <- golem::with_golem_options(
-        app = shiny::shinyApp(ui = app_ui, server = app_server),
-        golem_opts = c(golem_opts, extra_opts)
-      )
+        # Access internal app functions via getFromNamespace since they're not exported
+        app_ui_fn <- getFromNamespace("app_ui", "PmetricsReports")
+        app_server_fn <- getFromNamespace("app_server", "PmetricsReports")
 
-      port <- httpuv::randomPort()
-      writeLines(as.character(port), port_file)
+        app <- golem::with_golem_options(
+          app = shiny::shinyApp(ui = app_ui_fn, server = app_server_fn),
+          golem_opts = c(golem_opts, extra_opts)
+        )
 
-      shiny::runApp(
-        app,
-        launch.browser = FALSE,
-        port = port,
-        host = "127.0.0.1"
-      )
+        port <- httpuv::randomPort()
+        writeLines(as.character(port), port_file)
+
+        shiny::runApp(
+          app,
+          launch.browser = FALSE,
+          port = port,
+          host = "127.0.0.1"
+        )
+      }, error = function(e) {
+        writeLines(conditionMessage(e), err_file)
+      })
     },
     args = list(
-      pkg_path = pkg_path,
+      www_path = www_path,
+      template_path = template_path,
       port_file = port_file,
+      err_file = err_file,
       golem_opts = golem_opts,
       extra_opts = extra_opts
     ),
@@ -77,17 +100,32 @@ run_app_background <- function(res = NULL, report_generated_at = Sys.time(), ...
     stderr = "|"
   )
 
+
   port <- NA_integer_
   deadline <- Sys.time() + 10
   while (!file.exists(port_file) && Sys.time() < deadline) {
     Sys.sleep(0.05)
   }
+  
+  if (file.exists(err_file)) {
+    err_msg <- readLines(err_file, warn = FALSE)
+    cli::cli_abort(c(
+      "x" = "Failed to launch app in background process:",
+      "i" = err_msg
+    ))
+  }
+  
   if (file.exists(port_file)) {
     port <- suppressWarnings(as.integer(readLines(port_file, warn = FALSE)[1]))
   }
 
   if (is.finite(port) && !is.na(port)) {
     utils::browseURL(sprintf("http://127.0.0.1:%s", port))
+  } else {
+    cli::cli_warn(c(
+      "!" = "Failed to launch app: port could not be determined",
+      "i" = "The app may still be launching. Check your R console for errors."
+    ))
   }
 
   invisible(process)
