@@ -1,8 +1,5 @@
+#' @export
 app_server <- function(input, output, session) {
-  if (is_live_session_mode() && !inherits(get_report_result(), "PM_result") && !inherits(get_live_report_result(), "PM_result")) {
-    return(live_app_server(input, output, session))
-  }
-
   res <- validate_report_result(get_report_result())
   opts <- report_options()
   ic_method <- resolve_cycle_ic_method(res, preferred = opts$ic_method)

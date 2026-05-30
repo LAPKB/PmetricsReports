@@ -1,8 +1,47 @@
 app_sys <- function(...) {
+  # First try system.file (works for installed packages)
   path <- system.file(..., package = "PmetricsReports")
-  if (identical(path, "")) {
-    path <- file.path(golem::pkg_path(), ...)
+  if (!identical(path, "")) {
+    return(path)
   }
+  
+  # Try to get the namespace path for PmetricsReports directly
+  # This is more reliable when loaded via pkgload::load_all()
+  tryCatch({
+    pkg_ns <- asNamespace("PmetricsReports")
+    ns_path <- getNamespaceInfo(pkg_ns, "path")
+    if (nzchar(ns_path)) {
+      return(file.path(ns_path, ...))
+    }
+  }, error = function(e) NULL)
+  
+  # Fallback: environment variable or .here if available
+  tryCatch({
+    if (requireNamespace("here", quietly = TRUE)) {
+      here_path <- here::here()
+      if (file.exists(file.path(here_path, "R"))) {
+        return(file.path(here_path, ...))
+      }
+    }
+  }, error = function(e) NULL)
+  
+  # Last resort: try golem::pkg_path() but only if we can verify it's the right package
+  golem_path <- golem::pkg_path()
+  if (file.exists(file.path(golem_path, "DESCRIPTION"))) {
+    desc_path <- tryCatch({
+      desc <- read.dcf(file.path(golem_path, "DESCRIPTION"))
+      if ("Package" %in% colnames(desc)) {
+        as.character(desc[1, "Package"])
+      } else {
+        ""
+      }
+    }, error = function(e) "")
+    if (identical(desc_path, "PmetricsReports")) {
+      return(file.path(golem_path, ...))
+    }
+  }
+  
+  # If nothing works, return the original result (which might be empty string)
   path
 }
 

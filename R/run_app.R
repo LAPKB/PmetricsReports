@@ -99,21 +99,9 @@ run_app_background <- function(
   process <- callr::r_bg(
     function(pkg_path, port_file, golem_opts, extra_opts) {
       if (nzchar(pkg_path) && requireNamespace("pkgload", quietly = TRUE)) {
-        pkgload::load_all(pkg_path, quiet = TRUE)
+        pkgload::load_all(pkg_path, quiet = TRUE, export_all = TRUE)
       } else {
         library(PmetricsReports)
-      }
-
-      live_session <- if (is.list(extra_opts$live_session)) {
-        unclass(extra_opts$live_session)
-      } else {
-        NULL
-      }
-
-      if (is.list(live_session)) {
-        get("prime_live_session_connection", envir = asNamespace("PmetricsReports"))(live_session)
-        golem_opts$live_session <- live_session
-        extra_opts$live_session <- NULL
       }
 
       app <- golem::with_golem_options(

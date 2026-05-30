@@ -1,8 +1,4 @@
 app_ui <- function(request) {
-  if (is_live_session_mode() && !inherits(get_report_result(), "PM_result") && !inherits(get_live_report_result(), "PM_result")) {
-    return(live_app_ui())
-  }
-
   res <- validate_report_result(get_report_result())
 
   shiny::tagList(
